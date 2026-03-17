@@ -13,6 +13,7 @@ use crate::AppState;
 pub struct SearchParams {
     pub q: String,
     #[serde(rename = "type")]
+    #[allow(dead_code)]
     pub entity_type: Option<String>,
     pub limit: Option<i64>,
 }

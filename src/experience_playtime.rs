@@ -7,7 +7,6 @@ use axum::{
 };
 use serde::Serialize;
 use sqlx::FromRow;
-use uuid::Uuid;
 
 use crate::games::{resolve_game_id, internal_error, ApiError};
 use crate::models::Link;
