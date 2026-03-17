@@ -7,6 +7,7 @@ use tracing_subscriber::EnvFilter;
 mod games;
 mod health;
 mod models;
+mod player_counts;
 mod search;
 mod taxonomy;
 
@@ -47,6 +48,10 @@ async fn main() {
         .route(
             "/v1/games/{id_or_slug}/expansions",
             get(games::list_expansions),
+        )
+        .route(
+            "/v1/games/{id_or_slug}/player-count-ratings",
+            get(player_counts::get_player_count_ratings),
         )
         .route("/v1/games/search", post(search::search_games))
         .route("/v1/mechanics", get(taxonomy::list_mechanics))

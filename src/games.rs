@@ -149,7 +149,7 @@ pub struct GameLinks {
     pub expansions: Link,
 }
 
-type ApiError = (StatusCode, Json<ErrorResponse>);
+pub type ApiError = (StatusCode, Json<ErrorResponse>);
 
 pub async fn get_game(
     State(state): State<AppState>,
@@ -271,7 +271,7 @@ pub async fn list_expansions(
 }
 
 // Helper: resolve UUID or slug to a game ID
-async fn resolve_game_id(db: &PgPool, id_or_slug: &str) -> Result<Uuid, ApiError> {
+pub async fn resolve_game_id(db: &PgPool, id_or_slug: &str) -> Result<Uuid, ApiError> {
     let id: Option<Uuid> = if let Ok(uuid) = id_or_slug.parse::<Uuid>() {
         sqlx::query_scalar("SELECT id FROM games WHERE id = $1")
             .bind(uuid)
@@ -299,7 +299,7 @@ async fn resolve_game_id(db: &PgPool, id_or_slug: &str) -> Result<Uuid, ApiError
     })
 }
 
-fn internal_error() -> ApiError {
+pub fn internal_error() -> ApiError {
     (
         StatusCode::INTERNAL_SERVER_ERROR,
         Json(ErrorResponse {
