@@ -7,6 +7,7 @@ use tracing_subscriber::EnvFilter;
 mod games;
 mod health;
 mod models;
+mod taxonomy;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -42,6 +43,13 @@ async fn main() {
         .route("/readyz", get(health::readyz))
         .route("/v1/games", get(games::list_games))
         .route("/v1/games/{id_or_slug}", get(games::get_game))
+        .route(
+            "/v1/games/{id_or_slug}/expansions",
+            get(games::list_expansions),
+        )
+        .route("/v1/mechanics", get(taxonomy::list_mechanics))
+        .route("/v1/categories", get(taxonomy::list_categories))
+        .route("/v1/themes", get(taxonomy::list_themes))
         .with_state(state);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));

@@ -9,6 +9,7 @@ use axum::{
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use serde::Deserialize;
+use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::models::*;
@@ -228,4 +229,84 @@ pub async fn get_game(
         game,
         expansions,
     }))
+}
+
+// GET /v1/games/{id_or_slug}/expansions (Implementing Guide Step 4)
+// Lists expansions where parent_game_id matches the base game
+
+pub async fn list_expansions(
+    State(state): State<AppState>,
+    Path(id_or_slug): Path<String>,
+) -> Result<Json<PaginatedResponse<Game>>, ApiError> {
+    // Resolve the base game first
+    let base_game_id = resolve_game_id(&state.db, &id_or_slug).await?;
+
+    let expansions = sqlx::query_as::<_, Game>(&format!(
+        "SELECT {} FROM games WHERE parent_game_id = $1 ORDER BY year_published, name",
+        GAME_COLUMNS
+    ))
+    .bind(base_game_id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| internal_error())?;
+
+    let total = expansions.len() as i64;
+
+    Ok(Json(PaginatedResponse {
+        data: expansions,
+        meta: PaginationMeta {
+            total,
+            next_cursor: None,
+            prev_cursor: None,
+        },
+        _links: PaginationLinks {
+            self_link: Link {
+                href: format!("/v1/games/{}/expansions", id_or_slug),
+                title: None,
+            },
+            next: None,
+            prev: None,
+        },
+    }))
+}
+
+// Helper: resolve UUID or slug to a game ID
+async fn resolve_game_id(db: &PgPool, id_or_slug: &str) -> Result<Uuid, ApiError> {
+    let id: Option<Uuid> = if let Ok(uuid) = id_or_slug.parse::<Uuid>() {
+        sqlx::query_scalar("SELECT id FROM games WHERE id = $1")
+            .bind(uuid)
+            .fetch_optional(db)
+            .await
+            .map_err(|_| internal_error())?
+    } else {
+        sqlx::query_scalar("SELECT id FROM games WHERE slug = $1")
+            .bind(id_or_slug)
+            .fetch_optional(db)
+            .await
+            .map_err(|_| internal_error())?
+    };
+
+    id.ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error_type: "about:blank".to_string(),
+                title: "Not Found".to_string(),
+                status: 404,
+                detail: Some(format!("Game '{}' not found.", id_or_slug)),
+            }),
+        )
+    })
+}
+
+fn internal_error() -> ApiError {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorResponse {
+            error_type: "about:blank".to_string(),
+            title: "Internal Server Error".to_string(),
+            status: 500,
+            detail: None,
+        }),
+    )
 }
