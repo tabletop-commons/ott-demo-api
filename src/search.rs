@@ -5,7 +5,7 @@
 
 use axum::{extract::State, http::StatusCode, Json};
 use serde::Deserialize;
-use uuid::Uuid;
+
 
 use crate::games::GAME_COLUMNS;
 use crate::models::*;
@@ -46,6 +46,7 @@ pub struct SearchRequest {
 
     // Pagination
     pub limit: Option<i64>,
+    #[allow(dead_code)]
     pub cursor: Option<String>,
 }
 
@@ -242,7 +243,7 @@ pub async fn search_games(
     };
 
     // Alias game columns with "g." prefix
-    let columns = GAME_COLUMNS.replace("id,", "g.id,").replace(
+    let _columns = GAME_COLUMNS.replace("id,", "g.id,").replace(
         ", slug,",
         ", g.slug,",
     );

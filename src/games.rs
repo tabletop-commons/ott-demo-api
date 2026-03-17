@@ -4,7 +4,6 @@
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
-    response::IntoResponse,
     Json,
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
@@ -147,6 +146,10 @@ pub struct GameLinks {
     #[serde(rename = "self")]
     pub self_link: Link,
     pub expansions: Link,
+    pub effective_properties: Link,
+    pub player_count_ratings: Link,
+    pub relationships: Link,
+    pub experience_playtime: Link,
 }
 
 pub type ApiError = (StatusCode, Json<ErrorResponse>);
@@ -223,6 +226,22 @@ pub async fn get_game(
             },
             expansions: Link {
                 href: format!("/v1/games/{}/expansions", slug),
+                title: None,
+            },
+            effective_properties: Link {
+                href: format!("/v1/games/{}/effective-properties", slug),
+                title: None,
+            },
+            player_count_ratings: Link {
+                href: format!("/v1/games/{}/player-count-ratings", slug),
+                title: None,
+            },
+            relationships: Link {
+                href: format!("/v1/games/{}/relationships", slug),
+                title: None,
+            },
+            experience_playtime: Link {
+                href: format!("/v1/games/{}/experience-playtime", slug),
                 title: None,
             },
         },
