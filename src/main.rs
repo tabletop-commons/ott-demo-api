@@ -9,11 +9,13 @@ mod experience_playtime;
 mod fulltext_search;
 mod games;
 mod health;
+mod materialize;
 mod models;
 mod player_counts;
 mod relationships;
 mod search;
 mod taxonomy;
+mod votes;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -70,6 +72,11 @@ async fn main() {
             get(experience_playtime::get_experience_playtime),
         )
         .route("/v1/search", get(fulltext_search::search))
+        .route(
+            "/v1/games/{id_or_slug}/ratings",
+            post(votes::submit_rating),
+        )
+        .route("/v1/admin/materialize", post(materialize::materialize))
         .route("/v1/games/search", post(search::search_games))
         .route("/v1/mechanics", get(taxonomy::list_mechanics))
         .route("/v1/categories", get(taxonomy::list_categories))
