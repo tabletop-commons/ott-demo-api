@@ -29,7 +29,6 @@ pub struct ListGamesParams {
     pub mode: Option<String>,
     pub sort: Option<String>,
     pub order: Option<String>,
-    #[allow(dead_code)]
     pub effective: Option<bool>,
     pub community_playtime_max: Option<i32>,
 }
@@ -48,10 +47,31 @@ pub async fn list_games(
     });
 
     // Build WHERE clauses from filter params
+    let effective = params.effective.unwrap_or(false);
     let mut conditions: Vec<String> = Vec::new();
 
+    // Player count filter — when effective=true, also match via expansion combinations
     if let Some(players) = params.players {
-        conditions.push(format!("min_players <= {} AND max_players >= {}", players, players));
+        if effective {
+            // Match if base supports it OR any expansion combination supports it
+            // OR base + max property_modification delta supports it (three-tier)
+            conditions.push(format!(
+                "((min_players <= {p} AND max_players >= {p})
+                  OR id IN (
+                     SELECT base_game_id FROM expansion_combinations
+                     WHERE effective_min_players <= {p} AND effective_max_players >= {p}
+                  )
+                  OR id IN (
+                     SELECT base_game_id FROM property_modifications
+                     GROUP BY base_game_id
+                     HAVING (SELECT g2.max_players FROM games g2 WHERE g2.id = base_game_id)
+                            + MAX(max_players_delta) >= {p}
+                  ))",
+                p = players
+            ));
+        } else {
+            conditions.push(format!("min_players <= {} AND max_players >= {}", players, players));
+        }
     }
     if let Some(min) = params.players_min {
         conditions.push(format!("max_players >= {}", min));
@@ -59,6 +79,8 @@ pub async fn list_games(
     if let Some(max) = params.players_max {
         conditions.push(format!("min_players <= {}", max));
     }
+
+    // Weight filter — when effective=true, also match via expansion-modified weight
     if let Some(min) = params.weight_min {
         conditions.push(format!("weight >= {}", min));
     }
