@@ -1,0 +1,30 @@
+[package]
+name = "obg-demo-api"
+version = "0.1.0"
+edition = "2024"
+description = "Demo OpenTabletop-conforming API server"
+license = "Apache-2.0"
+
+[dependencies]
+# Web framework (per ADR-0025 recommendation)
+axum = { version = "0.8", features = ["macros"] }
+tokio = { version = "1", features = ["full"] }
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+
+# Database (per ADR-0027, ADR-0029)
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "uuid", "chrono"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Configuration (12-factor, per ADR-0020)
+dotenvy = "0.15"
+
+# Observability (per ADR-0023)
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Utilities
+uuid = { version = "1", features = ["v7", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
