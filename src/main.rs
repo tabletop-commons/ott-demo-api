@@ -41,6 +41,7 @@ async fn main() {
         .route("/healthz", get(health::healthz))
         .route("/readyz", get(health::readyz))
         .route("/v1/games", get(games::list_games))
+        .route("/v1/games/{id_or_slug}", get(games::get_game))
         .with_state(state);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
