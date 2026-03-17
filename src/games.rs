@@ -36,7 +36,7 @@ pub struct ListGamesParams {
 pub async fn list_games(
     State(state): State<AppState>,
     Query(params): Query<ListGamesParams>,
-) -> Result<Json<PaginatedResponse<Game>>, StatusCode> {
+) -> Result<Json<PaginatedResponse<GameWithMatch>>, StatusCode> {
     let limit = params.limit.unwrap_or(25).min(100);
 
     // Decode cursor (base64url-encoded UUID for keyset pagination)
@@ -136,11 +136,96 @@ pub async fn list_games(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // Build next cursor from last game's id
-    let next_cursor = if games.len() as i64 == limit {
+    // If effective mode, populate matched_via for games that matched through expansions
+    let games_with_match: Vec<GameWithMatch> = if effective && params.players.is_some() {
+        let players = params.players.unwrap();
+        let mut results = Vec::new();
+        for game in games {
+            let base_matches = game.min_players.unwrap_or(0) <= players
+                && game.max_players.unwrap_or(0) >= players;
+
+            let matched_via = if base_matches {
+                Some(MatchedVia {
+                    match_type: "base".to_string(),
+                    expansions: None,
+                    effective_properties: None,
+                    resolution_tier: 3,
+                })
+            } else {
+                // Check which expansion combination matched
+                let combo: Option<(Option<i32>, Option<i32>, Option<f64>, Option<i32>, Option<i32>)> =
+                    sqlx::query_as(
+                        "SELECT effective_min_players, effective_max_players,
+                                effective_weight::FLOAT8, effective_playtime_min, effective_playtime_max
+                         FROM expansion_combinations
+                         WHERE base_game_id = $1
+                           AND effective_min_players <= $2 AND effective_max_players >= $2
+                         LIMIT 1",
+                    )
+                    .bind(game.id)
+                    .bind(players)
+                    .fetch_optional(&state.db)
+                    .await
+                    .ok()
+                    .flatten();
+
+                if let Some((min_p, max_p, w, min_t, max_t)) = combo {
+                    // Tier 1: explicit combination
+                    // Look up expansion names
+                    let exp_names: Vec<MatchedExpansion> = sqlx::query_as::<_, (String, String)>(
+                        "SELECT g.slug, g.name FROM games g
+                         JOIN expansion_combinations ec ON g.id = ANY(ec.expansion_ids)
+                         WHERE ec.base_game_id = $1
+                         LIMIT 10",
+                    )
+                    .bind(game.id)
+                    .fetch_all(&state.db)
+                    .await
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|(slug, name)| MatchedExpansion { slug, name })
+                    .collect();
+
+                    Some(MatchedVia {
+                        match_type: "expansion_combination".to_string(),
+                        expansions: Some(exp_names),
+                        effective_properties: Some(EffectiveMatchProperties {
+                            min_players: min_p,
+                            max_players: max_p,
+                            weight: w,
+                            min_playtime: min_t,
+                            max_playtime: max_t,
+                        }),
+                        resolution_tier: 1,
+                    })
+                } else {
+                    // Tier 2: delta sum
+                    Some(MatchedVia {
+                        match_type: "delta_sum".to_string(),
+                        expansions: None,
+                        effective_properties: None,
+                        resolution_tier: 2,
+                    })
+                }
+            };
+            results.push(GameWithMatch { game, matched_via });
+        }
+        results
+    } else {
         games
+            .into_iter()
+            .map(|game| GameWithMatch {
+                game,
+                matched_via: None,
+            })
+            .collect()
+    };
+
+    // Build next cursor from last game's id
+    let next_cursor = if games_with_match.len() as i64 == limit {
+        games_with_match
             .last()
-            .map(|g| URL_SAFE_NO_PAD.encode(g.id.to_string()))
+            .map(|g| URL_SAFE_NO_PAD.encode(g.game.id.to_string()))
     } else {
         None
     };
@@ -151,7 +236,7 @@ pub async fn list_games(
     });
 
     Ok(Json(PaginatedResponse {
-        data: games,
+        data: games_with_match,
         meta: PaginationMeta {
             total,
             next_cursor,

@@ -82,6 +82,42 @@ pub struct PaginationLinks {
     pub prev: Option<Link>,
 }
 
+// Effective mode matched_via metadata (per effective-mode.md Response Format)
+#[derive(Debug, Serialize, Clone)]
+pub struct MatchedVia {
+    #[serde(rename = "type")]
+    pub match_type: String, // "base", "expansion_combination", "delta_sum"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expansions: Option<Vec<MatchedExpansion>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_properties: Option<EffectiveMatchProperties>,
+    pub resolution_tier: i32, // 1, 2, or 3
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct MatchedExpansion {
+    pub slug: String,
+    pub name: String,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct EffectiveMatchProperties {
+    pub min_players: Option<i32>,
+    pub max_players: Option<i32>,
+    pub weight: Option<f64>,
+    pub min_playtime: Option<i32>,
+    pub max_playtime: Option<i32>,
+}
+
+// Game with optional matched_via for effective mode results
+#[derive(Debug, Serialize)]
+pub struct GameWithMatch {
+    #[serde(flatten)]
+    pub game: Game,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub matched_via: Option<MatchedVia>,
+}
+
 // RFC 9457 Problem Details error response (per ADR-0015)
 #[derive(Debug, Serialize)]
 pub struct ErrorResponse {
