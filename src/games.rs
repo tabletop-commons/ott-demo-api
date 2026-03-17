@@ -112,7 +112,7 @@ pub async fn list_games(
 }
 
 // Shared SQL columns for Game queries (cast NUMERIC to FLOAT8 for Rust f64)
-const GAME_COLUMNS: &str =
+pub const GAME_COLUMNS: &str =
     "id, slug, name, type, sort_name, parent_game_id, year_published,
      description, description_short, min_players, max_players,
      min_playtime_minutes, max_playtime_minutes,

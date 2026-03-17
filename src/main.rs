@@ -1,4 +1,4 @@
-use axum::{routing::get, Router};
+use axum::{routing::{get, post}, Router};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use std::net::SocketAddr;
@@ -7,6 +7,7 @@ use tracing_subscriber::EnvFilter;
 mod games;
 mod health;
 mod models;
+mod search;
 mod taxonomy;
 
 #[derive(Clone)]
@@ -47,6 +48,7 @@ async fn main() {
             "/v1/games/{id_or_slug}/expansions",
             get(games::list_expansions),
         )
+        .route("/v1/games/search", post(search::search_games))
         .route("/v1/mechanics", get(taxonomy::list_mechanics))
         .route("/v1/categories", get(taxonomy::list_categories))
         .route("/v1/themes", get(taxonomy::list_themes))
