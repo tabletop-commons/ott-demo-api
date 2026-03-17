@@ -1,7 +1,7 @@
 # From the OpenTabletop Deploying Guide: "Local Development Stack"
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     environment:
       POSTGRES_DB: opentabletop
       POSTGRES_USER: ot
@@ -13,7 +13,7 @@ services:
       - ./data/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
 
   redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     ports:
       - "6379:6379"
 

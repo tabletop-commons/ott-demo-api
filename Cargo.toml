@@ -1,5 +1,5 @@
 [package]
-name = "obg-demo-api"
+name = "ott-demo-api"
 version = "0.1.0"
 edition = "2024"
 description = "Demo OpenTabletop-conforming API server"
