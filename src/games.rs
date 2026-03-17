@@ -18,6 +18,20 @@ use crate::AppState;
 pub struct ListGamesParams {
     pub cursor: Option<String>,
     pub limit: Option<i64>,
+    // Filter params (same as getting-started.md GET examples)
+    pub players: Option<i32>,
+    pub players_min: Option<i32>,
+    pub players_max: Option<i32>,
+    pub weight_min: Option<f64>,
+    pub weight_max: Option<f64>,
+    #[serde(alias = "type")]
+    pub game_type: Option<String>,
+    pub mode: Option<String>,
+    pub sort: Option<String>,
+    pub order: Option<String>,
+    #[allow(dead_code)]
+    pub effective: Option<bool>,
+    pub community_playtime_max: Option<i32>,
 }
 
 pub async fn list_games(
@@ -33,50 +47,72 @@ pub async fn list_games(
         s.parse().ok()
     });
 
-    // Count total games
-    let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM games")
+    // Build WHERE clauses from filter params
+    let mut conditions: Vec<String> = Vec::new();
+
+    if let Some(players) = params.players {
+        conditions.push(format!("min_players <= {} AND max_players >= {}", players, players));
+    }
+    if let Some(min) = params.players_min {
+        conditions.push(format!("max_players >= {}", min));
+    }
+    if let Some(max) = params.players_max {
+        conditions.push(format!("min_players <= {}", max));
+    }
+    if let Some(min) = params.weight_min {
+        conditions.push(format!("weight >= {}", min));
+    }
+    if let Some(max) = params.weight_max {
+        conditions.push(format!("weight <= {}", max));
+    }
+    if let Some(ref t) = params.game_type {
+        conditions.push(format!("type = '{}'", t.replace('\'', "''")));
+    }
+    if let Some(ref m) = params.mode {
+        conditions.push(format!("mode = '{}'", m.replace('\'', "''")));
+    }
+    if let Some(max) = params.community_playtime_max {
+        conditions.push(format!("community_playtime_median_minutes <= {}", max));
+    }
+    if let Some(after_id) = cursor_id {
+        conditions.push(format!("id > '{}'", after_id));
+    }
+
+    let where_clause = if conditions.is_empty() {
+        String::new()
+    } else {
+        format!("WHERE {}", conditions.join(" AND "))
+    };
+
+    let sort_col = match params.sort.as_deref() {
+        Some("bayes_rating") => "bayes_rating",
+        Some("weight") => "weight",
+        Some("year") => "year_published",
+        Some("name") => "name",
+        _ => "id",
+    };
+    let sort_order = match params.order.as_deref() {
+        Some("asc") => "ASC NULLS LAST",
+        Some("desc") => "DESC NULLS LAST",
+        _ => if sort_col == "id" { "ASC" } else { "DESC NULLS LAST" },
+    };
+
+    // Count query
+    let count_sql = format!("SELECT COUNT(*) FROM games {}", where_clause);
+    let total: i64 = sqlx::query_scalar(&count_sql)
         .fetch_one(&state.db)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // Keyset pagination: fetch games after cursor, ordered by id
-    let games = if let Some(after_id) = cursor_id {
-        sqlx::query_as::<_, Game>(
-            "SELECT id, slug, name, type, sort_name, parent_game_id, year_published,
-                    description, description_short, min_players, max_players,
-                    min_playtime_minutes, max_playtime_minutes,
-                    community_playtime_min_minutes, community_playtime_max_minutes,
-                    community_playtime_median_minutes, min_age, community_suggested_age,
-                    average_rating::FLOAT8, bayes_rating::FLOAT8, rating_count,
-                    rating_stddev::FLOAT8, rating_confidence::FLOAT8,
-                    weight::FLOAT8, weight_votes, rank_overall,
-                    owner_count, wishlist_count, total_plays, mode, funding_source,
-                    language_dependence, image_url, thumbnail_url, bgg_id, status
-             FROM games WHERE id > $1 ORDER BY id LIMIT $2",
-        )
-        .bind(after_id)
-        .bind(limit)
+    // Data query
+    let data_sql = format!(
+        "SELECT {} FROM games {} ORDER BY {} {} LIMIT {}",
+        GAME_COLUMNS, where_clause, sort_col, sort_order, limit
+    );
+    let games: Vec<Game> = sqlx::query_as(&data_sql)
         .fetch_all(&state.db)
         .await
-    } else {
-        sqlx::query_as::<_, Game>(
-            "SELECT id, slug, name, type, sort_name, parent_game_id, year_published,
-                    description, description_short, min_players, max_players,
-                    min_playtime_minutes, max_playtime_minutes,
-                    community_playtime_min_minutes, community_playtime_max_minutes,
-                    community_playtime_median_minutes, min_age, community_suggested_age,
-                    average_rating::FLOAT8, bayes_rating::FLOAT8, rating_count,
-                    rating_stddev::FLOAT8, rating_confidence::FLOAT8,
-                    weight::FLOAT8, weight_votes, rank_overall,
-                    owner_count, wishlist_count, total_plays, mode, funding_source,
-                    language_dependence, image_url, thumbnail_url, bgg_id, status
-             FROM games ORDER BY id LIMIT $1",
-        )
-        .bind(limit)
-        .fetch_all(&state.db)
-        .await
-    }
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Build next cursor from last game's id
     let next_cursor = if games.len() as i64 == limit {
