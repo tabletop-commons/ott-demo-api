@@ -4,7 +4,9 @@ use sqlx::PgPool;
 use std::net::SocketAddr;
 use tracing_subscriber::EnvFilter;
 
+mod games;
 mod health;
+mod models;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -38,6 +40,7 @@ async fn main() {
     let app = Router::new()
         .route("/healthz", get(health::healthz))
         .route("/readyz", get(health::readyz))
+        .route("/v1/games", get(games::list_games))
         .with_state(state);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
