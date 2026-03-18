@@ -14,6 +14,7 @@ pub struct TaxonomyTerm {
     pub slug: String,
     pub name: String,
     pub description: Option<String>,
+    pub parent_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize)]
@@ -25,7 +26,7 @@ pub async fn list_mechanics(
     State(state): State<AppState>,
 ) -> Result<Json<TaxonomyResponse>, StatusCode> {
     let terms = sqlx::query_as::<_, TaxonomyTerm>(
-        "SELECT id, slug, name, description FROM mechanics ORDER BY name",
+        "SELECT id, slug, name, description, parent_id FROM mechanics ORDER BY name",
     )
     .fetch_all(&state.db)
     .await
@@ -38,7 +39,7 @@ pub async fn list_categories(
     State(state): State<AppState>,
 ) -> Result<Json<TaxonomyResponse>, StatusCode> {
     let terms = sqlx::query_as::<_, TaxonomyTerm>(
-        "SELECT id, slug, name, description FROM categories ORDER BY name",
+        "SELECT id, slug, name, description, parent_id FROM categories ORDER BY name",
     )
     .fetch_all(&state.db)
     .await
@@ -51,7 +52,7 @@ pub async fn list_themes(
     State(state): State<AppState>,
 ) -> Result<Json<TaxonomyResponse>, StatusCode> {
     let terms = sqlx::query_as::<_, TaxonomyTerm>(
-        "SELECT id, slug, name, description FROM themes ORDER BY name",
+        "SELECT id, slug, name, description, parent_id FROM themes ORDER BY name",
     )
     .fetch_all(&state.db)
     .await

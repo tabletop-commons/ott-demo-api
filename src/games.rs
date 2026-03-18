@@ -17,6 +17,7 @@ use crate::AppState;
 #[derive(Debug, Deserialize)]
 pub struct ListGamesParams {
     pub cursor: Option<String>,
+    pub before: Option<String>,
     pub limit: Option<i64>,
     // Filter params (same as getting-started.md GET examples)
     pub players: Option<i32>,
@@ -39,12 +40,15 @@ pub async fn list_games(
 ) -> Result<Json<PaginatedResponse<GameWithMatch>>, StatusCode> {
     let limit = params.limit.unwrap_or(25).min(100);
 
-    // Decode cursor (base64url-encoded UUID for keyset pagination)
-    let cursor_id: Option<Uuid> = params.cursor.as_ref().and_then(|c| {
+    // Decode cursors (base64url-encoded UUID for keyset pagination)
+    let decode_cursor = |c: &str| -> Option<Uuid> {
         let bytes = URL_SAFE_NO_PAD.decode(c).ok()?;
         let s = std::str::from_utf8(&bytes).ok()?;
         s.parse().ok()
-    });
+    };
+    let cursor_id: Option<Uuid> = params.cursor.as_deref().and_then(decode_cursor);
+    let before_id: Option<Uuid> = params.before.as_deref().and_then(decode_cursor);
+    let is_backward = before_id.is_some() && cursor_id.is_none();
 
     // Build WHERE clauses from filter params
     let effective = params.effective.unwrap_or(false);
@@ -94,10 +98,13 @@ pub async fn list_games(
         conditions.push(format!("mode = '{}'", m.replace('\'', "''")));
     }
     if let Some(max) = params.community_playtime_max {
-        conditions.push(format!("community_playtime_median_minutes <= {}", max));
+        conditions.push(format!("community_median_playtime <= {}", max));
     }
     if let Some(after_id) = cursor_id {
         conditions.push(format!("id > '{}'", after_id));
+    }
+    if let Some(bef_id) = before_id {
+        conditions.push(format!("id < '{}'", bef_id));
     }
 
     let where_clause = if conditions.is_empty() {
@@ -113,14 +120,33 @@ pub async fn list_games(
         Some("name") => "name",
         _ => "id",
     };
+    let default_order = if sort_col == "id" { "ASC" } else { "DESC NULLS LAST" };
     let sort_order = match params.order.as_deref() {
         Some("asc") => "ASC NULLS LAST",
         Some("desc") => "DESC NULLS LAST",
-        _ => if sort_col == "id" { "ASC" } else { "DESC NULLS LAST" },
+        _ => default_order,
     };
 
-    // Count query
-    let count_sql = format!("SELECT COUNT(*) FROM games {}", where_clause);
+    // For backward pagination, reverse the sort direction to fetch the previous page,
+    // then reverse results back to normal order after fetching.
+    let query_order = if is_backward {
+        if sort_order.starts_with("ASC") { "DESC NULLS LAST" } else { "ASC NULLS LAST" }
+    } else {
+        sort_order
+    };
+
+    // Count query (without cursor conditions for accurate total)
+    let count_conditions: Vec<&str> = conditions
+        .iter()
+        .filter(|c| !c.starts_with("id >") && !c.starts_with("id <"))
+        .map(|c| c.as_str())
+        .collect();
+    let count_where = if count_conditions.is_empty() {
+        String::new()
+    } else {
+        format!("WHERE {}", count_conditions.join(" AND "))
+    };
+    let count_sql = format!("SELECT COUNT(*) FROM games {}", count_where);
     let total: i64 = sqlx::query_scalar(&count_sql)
         .fetch_one(&state.db)
         .await
@@ -129,88 +155,23 @@ pub async fn list_games(
     // Data query
     let data_sql = format!(
         "SELECT {} FROM games {} ORDER BY {} {} LIMIT {}",
-        GAME_COLUMNS, where_clause, sort_col, sort_order, limit
+        GAME_COLUMNS, where_clause, sort_col, query_order, limit
     );
-    let games: Vec<Game> = sqlx::query_as(&data_sql)
+    let mut games: Vec<Game> = sqlx::query_as(&data_sql)
         .fetch_all(&state.db)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    // Reverse results for backward pagination to restore natural order
+    if is_backward {
+        games.reverse();
+    }
+
     // If effective mode, populate matched_via for games that matched through expansions
-    let games_with_match: Vec<GameWithMatch> = if effective && params.players.is_some() {
-        let players = params.players.unwrap();
-        let mut results = Vec::new();
-        for game in games {
-            let base_matches = game.min_players.unwrap_or(0) <= players
-                && game.max_players.unwrap_or(0) >= players;
-
-            let matched_via = if base_matches {
-                Some(MatchedVia {
-                    match_type: "base".to_string(),
-                    expansions: None,
-                    effective_properties: None,
-                    resolution_tier: 3,
-                })
-            } else {
-                // Check which expansion combination matched
-                let combo: Option<(Option<i32>, Option<i32>, Option<f64>, Option<i32>, Option<i32>)> =
-                    sqlx::query_as(
-                        "SELECT effective_min_players, effective_max_players,
-                                effective_weight::FLOAT8, effective_playtime_min, effective_playtime_max
-                         FROM expansion_combinations
-                         WHERE base_game_id = $1
-                           AND effective_min_players <= $2 AND effective_max_players >= $2
-                         LIMIT 1",
-                    )
-                    .bind(game.id)
-                    .bind(players)
-                    .fetch_optional(&state.db)
-                    .await
-                    .ok()
-                    .flatten();
-
-                if let Some((min_p, max_p, w, min_t, max_t)) = combo {
-                    // Tier 1: explicit combination
-                    // Look up expansion names
-                    let exp_names: Vec<MatchedExpansion> = sqlx::query_as::<_, (String, String)>(
-                        "SELECT g.slug, g.name FROM games g
-                         JOIN expansion_combinations ec ON g.id = ANY(ec.expansion_ids)
-                         WHERE ec.base_game_id = $1
-                         LIMIT 10",
-                    )
-                    .bind(game.id)
-                    .fetch_all(&state.db)
-                    .await
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|(slug, name)| MatchedExpansion { slug, name })
-                    .collect();
-
-                    Some(MatchedVia {
-                        match_type: "expansion_combination".to_string(),
-                        expansions: Some(exp_names),
-                        effective_properties: Some(EffectiveMatchProperties {
-                            min_players: min_p,
-                            max_players: max_p,
-                            weight: w,
-                            min_playtime: min_t,
-                            max_playtime: max_t,
-                        }),
-                        resolution_tier: 1,
-                    })
-                } else {
-                    // Tier 2: delta sum
-                    Some(MatchedVia {
-                        match_type: "delta_sum".to_string(),
-                        expansions: None,
-                        effective_properties: None,
-                        resolution_tier: 2,
-                    })
-                }
-            };
-            results.push(GameWithMatch { game, matched_via });
-        }
-        results
+    let games_with_match: Vec<GameWithMatch> = if effective {
+        crate::effective::populate_matched_via(&state.db, games, params.players)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     } else {
         games
             .into_iter()
@@ -221,10 +182,21 @@ pub async fn list_games(
             .collect()
     };
 
-    // Build next cursor from last game's id
-    let next_cursor = if games_with_match.len() as i64 == limit {
+    // Build cursors
+    let has_full_page = games_with_match.len() as i64 == limit;
+    let has_cursor = cursor_id.is_some() || before_id.is_some();
+
+    let next_cursor = if (is_backward && has_cursor) || (!is_backward && has_full_page) {
         games_with_match
             .last()
+            .map(|g| URL_SAFE_NO_PAD.encode(g.game.id.to_string()))
+    } else {
+        None
+    };
+
+    let prev_cursor = if (is_backward && has_full_page) || (!is_backward && has_cursor) {
+        games_with_match
+            .first()
             .map(|g| URL_SAFE_NO_PAD.encode(g.game.id.to_string()))
     } else {
         None
@@ -234,13 +206,17 @@ pub async fn list_games(
         href: format!("/v1/games?cursor={}&limit={}", c, limit),
         title: None,
     });
+    let prev_link = prev_cursor.as_ref().map(|c| Link {
+        href: format!("/v1/games?before={}&limit={}", c, limit),
+        title: None,
+    });
 
     Ok(Json(PaginatedResponse {
         data: games_with_match,
         meta: PaginationMeta {
             total,
             next_cursor,
-            prev_cursor: None,
+            prev_cursor,
         },
         _links: PaginationLinks {
             self_link: Link {
@@ -248,7 +224,7 @@ pub async fn list_games(
                 title: None,
             },
             next: next_link,
-            prev: None,
+            prev: prev_link,
         },
     }))
 }
@@ -257,14 +233,15 @@ pub async fn list_games(
 pub const GAME_COLUMNS: &str =
     "id, slug, name, type, sort_name, parent_game_id, year_published,
      description, description_short, min_players, max_players,
-     min_playtime_minutes, max_playtime_minutes,
-     community_playtime_min_minutes, community_playtime_max_minutes,
-     community_playtime_median_minutes, min_age, community_suggested_age,
-     average_rating::FLOAT8, bayes_rating::FLOAT8, rating_count,
-     rating_stddev::FLOAT8, rating_confidence::FLOAT8,
+     min_playtime, max_playtime,
+     community_min_playtime, community_max_playtime,
+     community_median_playtime, min_age, community_suggested_age,
+     rating::FLOAT8, bayes_rating::FLOAT8, rating_votes,
+     rating_stddev::FLOAT8, rating_confidence::FLOAT8, rating_distribution,
      weight::FLOAT8, weight_votes, rank_overall,
      owner_count, wishlist_count, total_plays, mode, funding_source,
-     language_dependence, image_url, thumbnail_url, bgg_id, status";
+     language_dependence, image_url, thumbnail_url, bgg_id, status,
+     top_player_counts, recommended_player_counts, created_at, updated_at";
 
 // GET /v1/games/{id_or_slug} — single game by UUID or slug (Implementing Guide Step 4)
 // Lookup by UUID or slug (ADR-0008: both are valid identifiers)

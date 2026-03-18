@@ -16,21 +16,24 @@ CREATE TABLE mechanics (
     id          UUID PRIMARY KEY,
     slug        VARCHAR(255) UNIQUE NOT NULL,
     name        VARCHAR(255) NOT NULL,
-    description TEXT
+    description TEXT,
+    parent_id   UUID REFERENCES mechanics(id)
 );
 
 CREATE TABLE categories (
     id          UUID PRIMARY KEY,
     slug        VARCHAR(255) UNIQUE NOT NULL,
     name        VARCHAR(255) NOT NULL,
-    description TEXT
+    description TEXT,
+    parent_id   UUID REFERENCES categories(id)
 );
 
 CREATE TABLE themes (
     id          UUID PRIMARY KEY,
     slug        VARCHAR(255) UNIQUE NOT NULL,
     name        VARCHAR(255) NOT NULL,
-    description TEXT
+    description TEXT,
+    parent_id   UUID REFERENCES themes(id)
 );
 
 -- ============================================================
@@ -53,21 +56,21 @@ CREATE TABLE games (
     min_players                     INTEGER,
     max_players                     INTEGER,
 
-    -- Playtime: dual model (ADR-0014)
-    min_playtime_minutes            INTEGER,
-    max_playtime_minutes            INTEGER,
-    community_playtime_min_minutes  INTEGER,
-    community_playtime_max_minutes  INTEGER,
-    community_playtime_median_minutes INTEGER,
+    -- Playtime: dual model (ADR-0014, games.md)
+    min_playtime                    INTEGER,
+    max_playtime                    INTEGER,
+    community_min_playtime          INTEGER,
+    community_max_playtime          INTEGER,
+    community_median_playtime       INTEGER,
 
     -- Age
     min_age                         INTEGER,
     community_suggested_age         INTEGER,
 
-    -- Rating: four-layer model (see rating-model.md)
-    average_rating                  NUMERIC(4,2),
+    -- Rating: four-layer model (see rating-model.md, games.md)
+    rating                          NUMERIC(4,2),
     bayes_rating                    NUMERIC(4,2),
-    rating_count                    INTEGER DEFAULT 0,
+    rating_votes                    INTEGER DEFAULT 0,
     rating_stddev                   NUMERIC(4,2),
     rating_confidence               NUMERIC(3,2),
     rating_distribution             INTEGER[],  -- 10 buckets (1-10 stars)
@@ -75,6 +78,10 @@ CREATE TABLE games (
     -- Weight (see weight-model.md)
     weight                          NUMERIC(3,2),
     weight_votes                    INTEGER DEFAULT 0,
+
+    -- Derived player count arrays (materialized from player_count_ratings)
+    top_player_counts               INTEGER[],
+    recommended_player_counts       INTEGER[],
 
     -- Community signals (ADR-0041)
     rank_overall                    INTEGER,
@@ -104,9 +111,12 @@ CREATE TABLE games (
 CREATE INDEX idx_games_type ON games(type, status);
 CREATE INDEX idx_games_parent ON games(parent_game_id);
 CREATE INDEX idx_games_year ON games(year_published);
-CREATE INDEX idx_games_rating ON games(average_rating DESC, rating_count DESC);
+CREATE INDEX idx_games_rating ON games(rating DESC, rating_votes DESC);
 CREATE INDEX idx_games_weight ON games(weight);
 CREATE INDEX idx_games_bgg ON games(bgg_id);
+CREATE INDEX idx_games_rating_confidence ON games(rating_confidence);
+CREATE INDEX idx_games_min_age ON games(min_age);
+CREATE INDEX idx_games_community_age ON games(community_suggested_age);
 
 -- Full-text search (ADR-0027)
 ALTER TABLE games ADD COLUMN search_vector tsvector
@@ -210,7 +220,9 @@ CREATE TABLE expansion_combinations (
     effective_weight        NUMERIC(3,2),
     effective_playtime_min  INTEGER,
     effective_playtime_max  INTEGER,
-    effective_min_age       INTEGER
+    effective_min_age       INTEGER,
+    top_at                  INTEGER[],
+    recommended_at          INTEGER[]
 );
 CREATE INDEX idx_expansion_combos_base ON expansion_combinations(base_game_id);
 
@@ -280,6 +292,14 @@ CREATE TABLE game_editions (
 );
 CREATE INDEX idx_editions_game ON game_editions(game_id);
 
+-- Edition ↔ Publisher junction table (editions can have multiple publishers)
+CREATE TABLE edition_publishers (
+    edition_id   UUID NOT NULL REFERENCES game_editions(id) ON DELETE CASCADE,
+    publisher_id UUID NOT NULL REFERENCES publishers(id),
+    PRIMARY KEY (edition_id, publisher_id)
+);
+CREATE INDEX idx_edition_publishers_pub ON edition_publishers(publisher_id);
+
 -- ============================================================
 -- Awards (ADR-0042)
 -- ============================================================
@@ -334,9 +354,9 @@ CREATE TABLE external_identifiers (
 CREATE TABLE game_snapshots (
     game_id           UUID NOT NULL REFERENCES games(id) ON DELETE CASCADE,
     snapshot_date     DATE NOT NULL,
-    average_rating    NUMERIC(4,2),
-    bayes_rating      NUMERIC(4,2),
-    rating_count      INTEGER,
+    rating            NUMERIC(4,2),
+    rating_votes      INTEGER,
+    rating_confidence NUMERIC(3,2),
     weight            NUMERIC(3,2),
     weight_votes      INTEGER,
     rank_overall      INTEGER,
@@ -345,3 +365,26 @@ CREATE TABLE game_snapshots (
     owner_count       INTEGER,
     PRIMARY KEY (game_id, snapshot_date)
 );
+
+-- ============================================================
+-- Raw Vote Tables (Tier 1: append-only input data)
+-- ============================================================
+
+CREATE TABLE rating_votes (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    game_id          UUID NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+    rating           INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 10),
+    declared_scale   VARCHAR(10),
+    play_count       INTEGER,
+    experience_level VARCHAR(50),
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_rating_votes_game ON rating_votes(game_id);
+
+CREATE TABLE weight_votes_raw (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    game_id     UUID NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+    weight      NUMERIC(2,1) NOT NULL CHECK (weight >= 1.0 AND weight <= 5.0),
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_weight_votes_raw_game ON weight_votes_raw(game_id);

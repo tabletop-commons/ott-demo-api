@@ -14,6 +14,7 @@ mod models;
 mod player_counts;
 mod relationships;
 mod search;
+mod snapshots;
 mod taxonomy;
 mod votes;
 
@@ -75,6 +76,14 @@ async fn main() {
         .route(
             "/v1/games/{id_or_slug}/ratings",
             post(votes::submit_rating),
+        )
+        .route(
+            "/v1/games/{id_or_slug}/weight",
+            post(votes::submit_weight),
+        )
+        .route(
+            "/v1/games/{id_or_slug}/snapshots",
+            get(snapshots::get_snapshots),
         )
         .route("/v1/admin/materialize", post(materialize::materialize))
         .route("/v1/games/search", post(search::search_games))
