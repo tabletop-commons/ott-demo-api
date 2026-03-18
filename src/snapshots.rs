@@ -1,4 +1,4 @@
-// GET /v1/games/{id}/snapshots — Longitudinal trend data (ADR-0036)
+// GET /v1/games/{id}/snapshots -- Longitudinal trend data (ADR-0036)
 // Returns historical snapshots of a game's materialized aggregates.
 
 use axum::{

@@ -1,6 +1,6 @@
 // Vote submission endpoints
-// POST /v1/games/{id}/ratings — Submit a raw rating vote (1-10)
-// POST /v1/games/{id}/weight  — Submit a raw weight vote (1.0-5.0)
+// POST /v1/games/{id}/ratings -- Submit a raw rating vote (1-10)
+// POST /v1/games/{id}/weight  -- Submit a raw weight vote (1.0-5.0)
 // Raw votes are stored in Tier 1 tables and do NOT immediately
 // update the materialized aggregates on the Game entity.
 // See: materialization.md
@@ -48,7 +48,7 @@ pub async fn submit_rating(
 
     let game_id = resolve_game_id(&state.db, &id_or_slug).await?;
 
-    // Insert raw vote with context — does NOT update game aggregates
+    // Insert raw vote with context -- does NOT update game aggregates
     sqlx::query(
         "INSERT INTO rating_votes (game_id, rating, declared_scale, play_count, experience_level)
          VALUES ($1, $2, $3, $4, $5)",
@@ -74,7 +74,7 @@ pub async fn submit_rating(
     ))
 }
 
-// POST /v1/games/{id}/weight — Submit a raw weight vote (weight-model.md)
+// POST /v1/games/{id}/weight -- Submit a raw weight vote (weight-model.md)
 #[derive(Debug, Deserialize)]
 pub struct WeightVoteRequest {
     pub weight: f64, // 1.0-5.0 per weight-model.md

@@ -1,6 +1,6 @@
 // Health endpoints (per Deploying Guide "Container Image" requirements)
-// /healthz — liveness: "process is alive"
-// /readyz  — readiness: "can serve traffic, database connected"
+// /healthz -- liveness: "process is alive"
+// /readyz  -- readiness: "can serve traffic, database connected"
 
 use axum::{extract::State, http::StatusCode, Json};
 use serde::Serialize;

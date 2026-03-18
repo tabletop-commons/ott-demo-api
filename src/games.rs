@@ -1,5 +1,5 @@
 // Game endpoints (Implementing Guide Step 4)
-// GET /v1/games — list games with keyset pagination (ADR-0012)
+// GET /v1/games -- list games with keyset pagination (ADR-0012)
 
 use axum::{
     extract::{Path, Query, State},
@@ -54,7 +54,7 @@ pub async fn list_games(
     let effective = params.effective.unwrap_or(false);
     let mut conditions: Vec<String> = Vec::new();
 
-    // Player count filter — when effective=true, also match via expansion combinations
+    // Player count filter -- when effective=true, also match via expansion combinations
     if let Some(players) = params.players {
         if effective {
             // Match if base supports it OR any expansion combination supports it
@@ -84,7 +84,7 @@ pub async fn list_games(
         conditions.push(format!("min_players <= {}", max));
     }
 
-    // Weight filter — when effective=true, also match via expansion-modified weight
+    // Weight filter -- when effective=true, also match via expansion-modified weight
     if let Some(min) = params.weight_min {
         conditions.push(format!("weight >= {}", min));
     }
@@ -243,7 +243,7 @@ pub const GAME_COLUMNS: &str =
      language_dependence, image_url, thumbnail_url, bgg_id, status,
      top_player_counts, recommended_player_counts, created_at, updated_at";
 
-// GET /v1/games/{id_or_slug} — single game by UUID or slug (Implementing Guide Step 4)
+// GET /v1/games/{id_or_slug} -- single game by UUID or slug (Implementing Guide Step 4)
 // Lookup by UUID or slug (ADR-0008: both are valid identifiers)
 // 404 with RFC 9457 ErrorResponse if not found (ADR-0015)
 

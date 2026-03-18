@@ -1,4 +1,4 @@
-// GET /v1/search?q=... — Full-text search (ADR-0027)
+// GET /v1/search?q=... -- Full-text search (ADR-0027)
 // Uses PostgreSQL tsvector/tsquery with ts_rank for relevance ordering
 
 use axum::{extract::{Query, State}, http::StatusCode, Json};

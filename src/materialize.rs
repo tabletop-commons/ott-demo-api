@@ -1,13 +1,13 @@
-// POST /v1/admin/materialize — Trigger aggregate recomputation
+// POST /v1/admin/materialize -- Trigger aggregate recomputation
 // In production this would be a cron job (see deploying.md "Materialization Jobs").
 // The demo API exposes it as an endpoint for manual triggering.
 //
 // Execution order (per materialization.md):
 // 1. Per-game aggregates (rating, rating_votes, distribution, stddev)
 // 2. Global parameters (global mean for Bayesian)
-// 3. Bayesian ratings (bayes_rating) — Layer 4 implementation recommendation
+// 3. Bayesian ratings (bayes_rating) -- Layer 4 implementation recommendation
 // 4. Rankings (rank_overall)
-// 5. Rating confidence — spec-level three-factor formula (rating-model.md Layer 3)
+// 5. Rating confidence -- spec-level three-factor formula (rating-model.md Layer 3)
 // 6. Weight materialization
 // 7. Player count arrays
 
@@ -111,7 +111,7 @@ pub async fn materialize(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    // Step 5: Rating confidence — three-factor formula (rating-model.md Layer 3)
+    // Step 5: Rating confidence -- three-factor formula (rating-model.md Layer 3)
     // confidence = sample_factor × shape_factor × deviation_factor
     //   sample_factor    = rating_votes / (rating_votes + C)       -- Wilson-style, C=100
     //   shape_factor     = 1.0 - (stddev / 4.5)                   -- max stddev on 1-10 ≈ 4.5
@@ -182,7 +182,7 @@ pub async fn materialize(
     })?;
 
     // Step 8: Write game snapshots (ADR-0036, materialization.md)
-    // Snapshots are a side effect of materialization — capture the freshly-computed
+    // Snapshots are a side effect of materialization -- capture the freshly-computed
     // aggregates for longitudinal trend analysis.
     sqlx::query(
         "INSERT INTO game_snapshots (game_id, snapshot_date, rating, rating_votes, rating_confidence,

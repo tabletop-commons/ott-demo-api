@@ -1,4 +1,4 @@
-// POST /v1/games/search — compound filtering (Implementing Guide Step 9)
+// POST /v1/games/search -- compound filtering (Implementing Guide Step 9)
 // Cross-dimension: AND (all active dimensions must be satisfied)
 // Within dimension: OR (multiple values in one dimension)
 // Exclusion: _not parameters remove matches

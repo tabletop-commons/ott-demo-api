@@ -11,7 +11,7 @@ RUN mkdir src && echo "fn main() {}" > src/main.rs && cargo build --release && r
 COPY src/ src/
 RUN touch src/main.rs && cargo build --release
 
-# --- Runtime stage (distroless — ADR-0021) ---
+# --- Runtime stage (distroless -- ADR-0021) ---
 FROM gcr.io/distroless/cc-debian12
 WORKDIR /app
 COPY --from=build /app/target/release/ott-demo-api /app/ott-demo-api

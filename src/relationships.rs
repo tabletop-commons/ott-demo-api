@@ -1,4 +1,4 @@
-// GET /v1/games/{id}/relationships — typed directed edges (relationships.md)
+// GET /v1/games/{id}/relationships -- typed directed edges (relationships.md)
 // Returns expands, reimplements, contains, requires, recommends, integrates_with
 
 use axum::{

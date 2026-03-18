@@ -52,39 +52,15 @@ async fn main() {
         .route("/readyz", get(health::readyz))
         .route("/v1/games", get(games::list_games))
         .route("/v1/games/{id_or_slug}", get(games::get_game))
-        .route(
-            "/v1/games/{id_or_slug}/expansions",
-            get(games::list_expansions),
-        )
-        .route(
-            "/v1/games/{id_or_slug}/player-count-ratings",
-            get(player_counts::get_player_count_ratings),
-        )
-        .route(
-            "/v1/games/{id_or_slug}/effective-properties",
-            get(effective::get_effective_properties),
-        )
-        .route(
-            "/v1/games/{id_or_slug}/relationships",
-            get(relationships::get_relationships),
-        )
-        .route(
-            "/v1/games/{id_or_slug}/experience-playtime",
-            get(experience_playtime::get_experience_playtime),
-        )
+        .route("/v1/games/{id_or_slug}/expansions", get(games::list_expansions))
+        .route("/v1/games/{id_or_slug}/player-count-ratings", get(player_counts::get_player_count_ratings))
+        .route("/v1/games/{id_or_slug}/effective-properties", get(effective::get_effective_properties))
+        .route("/v1/games/{id_or_slug}/relationships", get(relationships::get_relationships))
+        .route("/v1/games/{id_or_slug}/experience-playtime", get(experience_playtime::get_experience_playtime))
         .route("/v1/search", get(fulltext_search::search))
-        .route(
-            "/v1/games/{id_or_slug}/ratings",
-            post(votes::submit_rating),
-        )
-        .route(
-            "/v1/games/{id_or_slug}/weight",
-            post(votes::submit_weight),
-        )
-        .route(
-            "/v1/games/{id_or_slug}/snapshots",
-            get(snapshots::get_snapshots),
-        )
+        .route("/v1/games/{id_or_slug}/ratings", post(votes::submit_rating))
+        .route("/v1/games/{id_or_slug}/weight", post(votes::submit_weight))
+        .route("/v1/games/{id_or_slug}/snapshots", get(snapshots::get_snapshots))
         .route("/v1/admin/materialize", post(materialize::materialize))
         .route("/v1/games/search", post(search::search_games))
         .route("/v1/mechanics", get(taxonomy::list_mechanics))

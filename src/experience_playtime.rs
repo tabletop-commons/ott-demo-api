@@ -1,4 +1,4 @@
-// GET /v1/games/{id}/experience-playtime — ADR-0034 experience-bucketed model
+// GET /v1/games/{id}/experience-playtime -- ADR-0034 experience-bucketed model
 // Returns per-level playtime data and multipliers
 
 use axum::{
